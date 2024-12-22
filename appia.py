@@ -36,16 +36,44 @@ def train_and_save_model():
     accuracy = accuracy_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred, average='weighted')
 
+    # Affichage des résultats
     st.write(f"Précision du modèle : {accuracy:.3f}")
     st.write(f"Rappel du modèle : {recall:.3f}")
 
     # Sauvegarde du modèle
     joblib.dump(model, MODEL_PATH)
     st.write(f"Modèle sauvegardé sous : {MODEL_PATH}")
-    return model
+    
+    return model, accuracy, recall
 
-# Fonction pour traiter un fichier CSV ou Excel
-def process_file(file):
+# Fonction pour charger ou entraîner le modèle
+def load_or_train_model():
+    """Charger le modèle si existant, sinon entraîner et sauvegarder."""
+    if os.path.exists(MODEL_PATH):
+        st.write("Chargement du modèle existant...")
+        model = joblib.load(MODEL_PATH)
+
+        # Charger les données pour recalculer la précision et le rappel
+        data = pd.read_csv("DatasetmalwareExtrait.csv")
+        X = data.drop(['legitimate'], axis=1)
+        y = data['legitimate']
+        
+        # Prédiction pour évaluer le modèle
+        y_pred = model.predict(X)
+        accuracy = accuracy_score(y, y_pred)
+        recall = recall_score(y, y_pred, average='weighted')
+
+        # Affichage des résultats
+        st.write(f"Précision du modèle : {accuracy:.3f}")
+        st.write(f"Rappel du modèle : {recall:.3f}")
+        st.write(f"Modèle chargé depuis : {MODEL_PATH}")
+        
+        return model, accuracy, recall
+    else:
+        return train_and_save_model()
+
+# Fonction pour traiter un fichier CSV ou Excel et calculer les prédictions
+def process_file(file, model):
     """Traiter un fichier .csv ou .xlsx et effectuer l'analyse."""
     try:
         # Lire le fichier en tant que dataframe pandas
@@ -54,32 +82,29 @@ def process_file(file):
         elif file.name.endswith('.xlsx'):
             data = pd.read_excel(file)
 
-        # Vous pouvez ici ajouter votre logique d'analyse spécifique aux fichiers CSV ou Excel
-        # Exemple : traiter les colonnes de données pour en faire des prédictions
-        st.write(f"Fichier {file.name} chargé avec succès.")
-        st.write(data.head())  # Affiche un aperçu des données
+        # Assurez-vous que les colonnes du fichier correspondent aux caractéristiques du modèle
+        data = data[FEATURES_LIST]  # Sélectionner uniquement les colonnes nécessaires
 
-        # Effectuer une analyse sur les données (par exemple, prédiction avec le modèle)
-        # Vous devrez peut-être ajuster cette partie pour qu'elle corresponde à vos features et à votre modèle
+        # Faire la prédiction sur les données du fichier
+        predictions = model.predict(data)
 
-        model = load_or_train_model()
-        # Utilisez les données du fichier pour effectuer la prédiction
-        prediction_result = "Exemple de résultat de prédiction basé sur les données du fichier"
-        st.write(prediction_result)
+        # Afficher les prédictions
+        st.write("Prédictions du modèle :")
+        st.write(predictions)
 
-        return prediction_result
+        # Calculez le recall pour les prédictions si la vraie valeur est disponible
+        # Ici, on suppose que la colonne 'legitimate' est présente dans le fichier
+        if 'legitimate' in data.columns:
+            y_true = data['legitimate']
+            recall = recall_score(y_true, predictions, average='weighted')
+            st.write(f"Rappel sur les prédictions : {recall:.3f}")
+        else:
+            st.write("Les vraies valeurs ne sont pas disponibles dans le fichier. Impossible de calculer le rappel.")
+
+        return predictions
     except Exception as e:
         st.error(f"Erreur lors du traitement du fichier : {str(e)}")
         return None
-
-# Fonction pour charger ou entraîner le modèle
-def load_or_train_model():
-    """Charger le modèle si existant, sinon entraîner et sauvegarder."""
-    if os.path.exists(MODEL_PATH):
-        st.write("Chargement du modèle existant...")
-        return joblib.load(MODEL_PATH)
-    else:
-        return train_and_save_model()
 
 # Interface utilisateur Streamlit
 def main():
@@ -87,7 +112,7 @@ def main():
     st.sidebar.write("Téléchargez un fichier CSV ou Excel pour déterminer les informations pertinentes ou prédire un résultat.")
 
     # Charger ou entraîner le modèle
-    model = load_or_train_model()
+    model, accuracy, recall = load_or_train_model()
 
     # Téléchargement de fichier CSV ou Excel
     uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel", type=["csv", "xlsx"])
@@ -97,11 +122,11 @@ def main():
         st.write("Analyse en cours...")
 
         # Effectuer l'analyse du fichier téléchargé
-        result = process_file(uploaded_file)
+        result = process_file(uploaded_file, model)
 
         # Affichage du résultat de l'analyse
         if result:
-            st.success(f"Analyse terminée : {result}")
+            st.success("Analyse terminée.")
 
         # Après l'analyse, permettre un nouveau téléchargement de fichier
         st.write("Vous pouvez télécharger un autre fichier si vous le souhaitez.")
