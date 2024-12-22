@@ -1,14 +1,10 @@
 import os
 import joblib
-import pefile
-import numpy as np
 import pandas as pd
 import streamlit as st
-import hashlib
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, recall_score
-
 
 # Constantes
 MODEL_PATH = 'random_forest_model.pkl'
@@ -48,7 +44,35 @@ def train_and_save_model():
     st.write(f"Modèle sauvegardé sous : {MODEL_PATH}")
     return model
 
-# Chargement du modèle ou entraînement si nécessaire
+# Fonction pour traiter un fichier CSV ou Excel
+def process_file(file):
+    """Traiter un fichier .csv ou .xlsx et effectuer l'analyse."""
+    try:
+        # Lire le fichier en tant que dataframe pandas
+        if file.name.endswith('.csv'):
+            data = pd.read_csv(file)
+        elif file.name.endswith('.xlsx'):
+            data = pd.read_excel(file)
+
+        # Vous pouvez ici ajouter votre logique d'analyse spécifique aux fichiers CSV ou Excel
+        # Exemple : traiter les colonnes de données pour en faire des prédictions
+        st.write(f"Fichier {file.name} chargé avec succès.")
+        st.write(data.head())  # Affiche un aperçu des données
+
+        # Effectuer une analyse sur les données (par exemple, prédiction avec le modèle)
+        # Vous devrez peut-être ajuster cette partie pour qu'elle corresponde à vos features et à votre modèle
+
+        model = load_or_train_model()
+        # Utilisez les données du fichier pour effectuer la prédiction
+        prediction_result = "Exemple de résultat de prédiction basé sur les données du fichier"
+        st.write(prediction_result)
+
+        return prediction_result
+    except Exception as e:
+        st.error(f"Erreur lors du traitement du fichier : {str(e)}")
+        return None
+
+# Fonction pour charger ou entraîner le modèle
 def load_or_train_model():
     """Charger le modèle si existant, sinon entraîner et sauvegarder."""
     if os.path.exists(MODEL_PATH):
@@ -57,100 +81,30 @@ def load_or_train_model():
     else:
         return train_and_save_model()
 
-# Fonction pour extraire les attributs PE
-def extract_pe_attributes(file_path):
-    """Extraire les 7 caractéristiques du fichier PE."""
-    try:
-        pe = pefile.PE(file_path)
-        attributes = {
-            'AddressOfEntryPoint': pe.OPTIONAL_HEADER.AddressOfEntryPoint,
-            'MajorLinkerVersion': pe.OPTIONAL_HEADER.MajorLinkerVersion,
-            'MajorImageVersion': pe.OPTIONAL_HEADER.MajorImageVersion,
-            'MajorOperatingSystemVersion': pe.OPTIONAL_HEADER.MajorOperatingSystemVersion,
-            'DllCharacteristics': pe.OPTIONAL_HEADER.DllCharacteristics,
-            'SizeOfStackReserve': pe.OPTIONAL_HEADER.SizeOfStackReserve,
-            'NumberOfSections': pe.FILE_HEADER.NumberOfSections
-        }
-        return attributes
-    except Exception as e:
-        st.error(f"Erreur lors de l'extraction des caractéristiques : {str(e)}")
-        return None
-
-# Fonction pour calculer le hash du fichier
-def calculate_file_hash(file_path):
-    """Calculer le hash SHA-256 du fichier pour vérification."""
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
-
-# Fonction de prédiction
-def predict_malware(file, model):
-    """Effectuer une prédiction de malware sur le fichier."""
-    if model is None:
-        return "Erreur : Modèle non chargé"
-
-    try:
-        # Sauvegarde temporaire du fichier
-        temp_file = f"temp_{file.name}"
-        with open(temp_file, "wb") as f:
-            f.write(file.read())
-
-        # Extraire les caractéristiques du fichier PE
-        features = extract_pe_attributes(temp_file)
-        if features is None:
-            os.remove(temp_file)
-            return "Erreur lors de l'extraction des caractéristiques du fichier."
-
-        # Convertir en DataFrame pour prédiction
-        df = pd.DataFrame([features])
-
-        # Faire la prédiction
-        prediction = model.predict(df)
-        proba = model.predict_proba(df)[0]
-
-        # Résultat avec probabilité
-        if prediction[0] == 1:
-            result = f"🚨 MALWARE (Probabilité: {proba[1] * 100:.2f}%)"
-        else:
-            result = f"✅ Fichier Légitime (Probabilité: {proba[0] * 100:.2f}%)"
-
-        st.download_button("Télécharger le rapport", result, file_name="rapport_analyse.txt")
-
-        # Suppression du fichier temporaire
-        os.remove(temp_file)
-
-        return result
-    except Exception as e:
-        return f"Erreur d'analyse : {str(e)}"
-
 # Interface utilisateur Streamlit
-
-
 def main():
     st.sidebar.header("🛡️ Détecteur de Malwares")
-    st.sidebar.write("Téléchargez un fichier exécutable (.exe) pour déterminer s'il est légitime ou un malware.")
+    st.sidebar.write("Téléchargez un fichier CSV ou Excel pour déterminer les informations pertinentes ou prédire un résultat.")
 
-    # Téléchargement de fichier avec file_uploader
-    uploaded_file = st.file_uploader("Téléchargez un fichier exécutable (.exe)", type=["exe"])
+    # Charger ou entraîner le modèle
+    model = load_or_train_model()
+
+    # Téléchargement de fichier CSV ou Excel
+    uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
-        # Afficher le nom du fichier téléchargé
-        st.write(f"Fichier téléchargé : {uploaded_file.name}")
-        
-        # Lire le fichier et effectuer des opérations sur celui-ci
-        file_bytes = uploaded_file.read()
-        
-        # Exemple de traitement du fichier
-        # Vous pouvez sauvegarder le fichier sur le serveur ou le traiter directement en mémoire
-        with open(f"temp_{uploaded_file.name}", "wb") as f:
-            f.write(file_bytes)
-        
-        st.success("Fichier téléchargé et sauvegardé avec succès!")
+        # Affichage de l'état d'analyse
+        st.write("Analyse en cours...")
 
-        # Vous pouvez maintenant effectuer des traitements comme l'extraction de caractéristiques PE, etc.
-        # Par exemple, vous pouvez appeler une fonction pour analyser le fichier .exe ici.
+        # Effectuer l'analyse du fichier téléchargé
+        result = process_file(uploaded_file)
+
+        # Affichage du résultat de l'analyse
+        if result:
+            st.success(f"Analyse terminée : {result}")
+
+        # Après l'analyse, permettre un nouveau téléchargement de fichier
+        st.write("Vous pouvez télécharger un autre fichier si vous le souhaitez.")
 
 if __name__ == "__main__":
     main()
