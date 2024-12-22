@@ -3,6 +3,9 @@ import pandas as pd
 import joblib
 import os
 import pefile
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 import hashlib
 
 # Chemin vers le modèle sauvegardé
@@ -17,7 +20,7 @@ def load_model():
         st.error("Le modèle n'est pas disponible. Veuillez entraîner le modèle et réessayer.")
         return None
 
-# Fonction pour extraire les attributs d'un fichier PE
+# Fonction pour extraire les attributs d'un fichier PE (exécutable)
 def extract_pe_attributes(file_path):
     try:
         pe = pefile.PE(file_path)
@@ -34,7 +37,7 @@ def extract_pe_attributes(file_path):
         st.error(f"Erreur lors de l'extraction des attributs : {e}")
         return None
 
-# Fonction pour extraire les attributs d'une ligne d'un fichier Excel
+# Fonction pour extraire les caractéristiques d'une ligne d'un fichier Excel
 def extract_features_from_row(row):
     try:
         return {
@@ -50,14 +53,27 @@ def extract_features_from_row(row):
         st.error(f"Colonne manquante dans les données : {e}")
         return None
 
-# Fonction pour calculer le hash du fichier
-def calculate_file_hash(file_path):
-    """Calculer le hash SHA-256 du fichier pour vérification."""
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
+# Fonction pour entraîner et sauvegarder le modèle
+def train_and_save_model(data):
+    # Séparer les caractéristiques (X) et les étiquettes (y)
+    X = data.drop("legitimate", axis=1)  # Caractéristiques
+    y = data["legitimate"]  # Étiquettes
+
+    # Diviser les données en ensembles d'entraînement et de test
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Créer et entraîner le modèle
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+
+    # Sauvegarder le modèle avec joblib
+    joblib.dump(model, MODEL_PATH)
+    st.success(f"Le modèle a été sauvegardé dans le fichier {MODEL_PATH}")
+
+    # Évaluer le modèle
+    y_pred = model.predict(X_test)
+    st.write("Évaluation du modèle :")
+    st.text(classification_report(y_test, y_pred))
 
 # Fonction de prédiction
 def predict_malware(file, model):
@@ -107,82 +123,69 @@ def main():
     # Interface utilisateur Streamlit
     st.title("🛡️ Détecteur de Malwares")
     st.write("Analysez des fichiers exécutables ou des fichiers Excel contenant des informations sur les exécutables.")
+    
+    # Choisir d'entraîner le modèle ou de faire une prédiction
+    action = st.selectbox("Que souhaitez-vous faire ?", ("Analyser un fichier", "Entraîner un modèle"))
 
-    # Choix du type de fichier
-    file_type = st.radio("Choisissez le type de fichier à analyser :", ("Exécutable", "Excel"))
-
-    if file_type == "Exécutable":
-        uploaded_file = st.file_uploader("Télécharger un fichier exécutable (.exe, .dll, .sys)", type=["exe", "dll", "sys"])
-        if uploaded_file is not None:
-            try:
-                temp_file = f"temp_{uploaded_file.name}"
-                with open(temp_file, "wb") as f:
-                    f.write(uploaded_file.read())
-
-                # Extraction des attributs PE
-                features = extract_pe_attributes(temp_file)
-                if features is None:
-                    st.error("Impossible d'extraire les attributs du fichier.")
-                else:
-                    df = pd.DataFrame([features])
-                    st.write("Attributs extraits :")
-                    st.dataframe(df)
-
-                    # Prédiction
-                    if model is not None:
-                        prediction = model.predict(df)
-                        proba = model.predict_proba(df)[0]
-                        if prediction[0] == 1:
-                            st.error(f"🚨 Malware détecté (Probabilité : {proba[1] * 100:.2f}%)")
-                        else:
-                            st.success(f"✅ Fichier légitime (Probabilité : {proba[0] * 100:.2f}%)")
-                    else:
-                        st.error("Le modèle n'est pas chargé.")
-
-                # Suppression du fichier temporaire
-                os.remove(temp_file)
-            except Exception as e:
-                st.error(f"Erreur lors du traitement du fichier : {e}")
-
-    elif file_type == "Excel":
+    if action == "Entraîner un modèle":
+        # Charger les données pour entraîner le modèle
         uploaded_file = st.file_uploader("Télécharger un fichier Excel (CSV, XLSX, XLS)", type=["csv", "xlsx", "xls"])
         if uploaded_file is not None:
             try:
-                # Lecture du fichier
+                # Lire le fichier
                 if uploaded_file.name.endswith(".csv"):
                     data = pd.read_csv(uploaded_file)
                 else:
                     data = pd.read_excel(uploaded_file)
 
-                st.write("Colonnes détectées :", data.columns.tolist())
-
-                # Vérification des colonnes nécessaires
-                REQUIRED_COLUMNS = [
-                    'AddressOfEntryPoint', 
-                    'MajorLinkerVersion', 
-                    'MajorImageVersion', 
-                    'MajorOperatingSystemVersion', 
-                    'DllCharacteristics', 
-                    'SizeOfStackReserve', 
-                    'NumberOfSections'
-                ]
-
-                missing_columns = [col for col in REQUIRED_COLUMNS if col not in data.columns]
+                # Vérifier les colonnes nécessaires
+                required_columns = ['AddressOfEntryPoint', 'MajorLinkerVersion', 'MajorImageVersion', 
+                                    'MajorOperatingSystemVersion', 'DllCharacteristics', 
+                                    'SizeOfStackReserve', 'NumberOfSections', 'legitimate']
+                missing_columns = [col for col in required_columns if col not in data.columns]
                 if missing_columns:
-                    st.error(f"Colonnes manquantes dans le fichier : {', '.join(missing_columns)}")
+                    st.error(f"Colonnes manquantes : {', '.join(missing_columns)}")
                 else:
-                    # Extraction des caractéristiques
+                    st.write("Données chargées :")
+                    st.dataframe(data.head())
+
+                    # Entraîner et sauvegarder le modèle
+                    train_and_save_model(data)
+
+            except Exception as e:
+                st.error(f"Erreur lors du traitement du fichier : {e}")
+
+    elif action == "Analyser un fichier":
+        # Choix du type de fichier
+        file_type = st.radio("Choisissez le type de fichier à analyser :", ("Exécutable", "Excel"))
+
+        if file_type == "Exécutable":
+            uploaded_file = st.file_uploader("Télécharger un fichier exécutable (.exe, .dll, .sys)", type=["exe", "dll", "sys"])
+            if uploaded_file is not None:
+                result = predict_malware(uploaded_file, model)
+                st.write(result)
+
+        elif file_type == "Excel":
+            uploaded_file = st.file_uploader("Télécharger un fichier Excel (CSV, XLSX, XLS)", type=["csv", "xlsx", "xls"])
+            if uploaded_file is not None:
+                try:
+                    # Lire le fichier
+                    if uploaded_file.name.endswith(".csv"):
+                        data = pd.read_csv(uploaded_file)
+                    else:
+                        data = pd.read_excel(uploaded_file)
+
+                    st.write("Données chargées :")
+                    st.dataframe(data.head())
+
+                    # Extraire les caractéristiques et prédire
                     features = data.apply(extract_features_from_row, axis=1).dropna()
                     features_df = pd.DataFrame(features.tolist())
-
-                    st.write("Données transformées pour prédiction :")
-                    st.dataframe(features_df.head())
-
-                    # Prédiction
                     if model is not None:
                         predictions = model.predict(features_df)
                         probabilities = model.predict_proba(features_df)
 
+                        # Ajout des résultats au DataFrame original
                         data['Prediction'] = predictions
                         data['Probabilité Malware'] = probabilities[:, 1]
                         data['Probabilité Légitime'] = probabilities[:, 0]
@@ -202,8 +205,8 @@ def main():
                             )
                     else:
                         st.error("Le modèle n'est pas chargé.")
-            except Exception as e:
-                st.error(f"Erreur lors du traitement du fichier : {e}")
+                except Exception as e:
+                    st.error(f"Erreur lors du traitement du fichier : {e}")
 
 if __name__ == "__main__":
     main()
