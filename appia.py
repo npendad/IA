@@ -10,7 +10,7 @@ from sklearn.metrics import accuracy_score, recall_score
 MODEL_PATH = 'random_forest_model.pkl'
 FEATURES_LIST = [
     'AddressOfEntryPoint', 'MajorLinkerVersion', 'MajorImageVersion', 
-    'MajorOperatingSystemVersion', 'DllCharacteristics', 'SizeOfStackReserve', 'NumberOfSections'
+    'MajorOperatingSystemVersion', 'DllCharacteristics', 'SizeOfStackReserve', 'NumberOfSections', 'ResourceSize'
 ]
 
 # Fonction pour entraîner et sauvegarder le modèle
@@ -82,6 +82,16 @@ def process_file(file, model):
         elif file.name.endswith('.xlsx'):
             data = pd.read_excel(file)
 
+        # Vérifier si toutes les caractéristiques nécessaires sont présentes
+        missing_columns = [col for col in FEATURES_LIST if col not in data.columns]
+        
+        if missing_columns:
+            st.warning(f"Le fichier manque les colonnes suivantes : {', '.join(missing_columns)}")
+            # Option pour remplir ou supprimer les colonnes manquantes
+            # Par exemple, on peut ajouter des valeurs par défaut (par exemple, 0) pour les colonnes manquantes
+            for col in missing_columns:
+                data[col] = 0  # Vous pouvez ajuster cette valeur par défaut si nécessaire
+
         # Assurez-vous que les colonnes du fichier correspondent aux caractéristiques du modèle
         data = data[FEATURES_LIST]  # Sélectionner uniquement les colonnes nécessaires
 
@@ -93,7 +103,6 @@ def process_file(file, model):
         st.write(predictions)
 
         # Calculez le recall pour les prédictions si la vraie valeur est disponible
-        # Ici, on suppose que la colonne 'legitimate' est présente dans le fichier
         if 'legitimate' in data.columns:
             y_true = data['legitimate']
             recall = recall_score(y_true, predictions, average='weighted')
