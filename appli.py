@@ -36,13 +36,14 @@ def train_and_save_model():
     accuracy = accuracy_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred, average='weighted')
 
-    # Afficher les résultats de la précision et du rappel
+    # Affichage des résultats
     st.write(f"Précision du modèle : {accuracy:.3f}")
     st.write(f"Rappel du modèle : {recall:.3f}")
 
     # Sauvegarde du modèle
     joblib.dump(model, MODEL_PATH)
     st.write(f"Modèle sauvegardé sous : {MODEL_PATH}")
+    
     return model, accuracy, recall
 
 # Fonction pour charger ou entraîner le modèle
@@ -52,20 +53,27 @@ def load_or_train_model():
         st.write("Chargement du modèle existant...")
         model = joblib.load(MODEL_PATH)
 
-        # Évaluation du modèle
-        # Comme nous n'avons pas de données d'évaluation lors du chargement, on pourrait simplement afficher un message
-        accuracy = 0.991  # Valeur d'exemple, ajustez selon votre besoin
-        recall = 0.991    # Valeur d'exemple, ajustez selon votre besoin
+        # Charger les données pour recalculer la précision et le rappel
+        data = pd.read_csv("DatasetmalwareExtrait.csv")
+        X = data.drop(['legitimate'], axis=1)
+        y = data['legitimate']
+        
+        # Prédiction pour évaluer le modèle
+        y_pred = model.predict(X)
+        accuracy = accuracy_score(y, y_pred)
+        recall = recall_score(y, y_pred, average='weighted')
 
+        # Affichage des résultats
         st.write(f"Précision du modèle : {accuracy:.3f}")
         st.write(f"Rappel du modèle : {recall:.3f}")
         st.write(f"Modèle chargé depuis : {MODEL_PATH}")
+        
         return model, accuracy, recall
     else:
         return train_and_save_model()
 
 # Fonction pour traiter un fichier CSV ou Excel
-def process_file(file):
+def process_file(file, model):
     """Traiter un fichier .csv ou .xlsx et effectuer l'analyse."""
     try:
         # Lire le fichier en tant que dataframe pandas
@@ -79,10 +87,7 @@ def process_file(file):
         st.write(data.head())  # Affiche un aperçu des données
 
         # Effectuer une analyse sur les données (par exemple, prédiction avec le modèle)
-        # Vous devrez peut-être ajuster cette partie pour qu'elle corresponde à vos features et à votre modèle
-
-        model, accuracy, recall = load_or_train_model()
-        # Utilisez les données du fichier pour effectuer la prédiction
+        # Exemple de prédiction basée sur des données extraites (ajustez selon votre besoin)
         prediction_result = "Exemple de résultat de prédiction basé sur les données du fichier"
         st.write(prediction_result)
 
@@ -107,7 +112,7 @@ def main():
         st.write("Analyse en cours...")
 
         # Effectuer l'analyse du fichier téléchargé
-        result = process_file(uploaded_file)
+        result = process_file(uploaded_file, model)
 
         # Affichage du résultat de l'analyse
         if result:
@@ -118,3 +123,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
