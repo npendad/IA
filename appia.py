@@ -72,6 +72,8 @@ def load_or_train_model():
     else:
         return train_and_save_model()
 
+from sklearn.metrics import accuracy_score, recall_score
+
 # Fonction pour traiter un fichier CSV ou Excel et calculer les prédictions
 def process_file(file, model):
     """Traiter un fichier .csv ou .xlsx et effectuer l'analyse."""
@@ -101,13 +103,19 @@ def process_file(file, model):
         st.write("Prédictions du modèle :")
         st.write(predictions)
 
-        # Calculez le recall pour les prédictions si la vraie valeur est disponible
+        # Calculez la précision et le rappel pour les prédictions
         if 'legitimate' in data.columns:
-            y_true = data['legitimate']
+            y_true = data['legitimate']  # Valeurs réelles (labels)
+            
+            # Calcul de la précision générale (accuracy)
+            accuracy = accuracy_score(y_true, predictions)
+            st.write(f"Précision générale : {accuracy:.3f}")
+
+            # Calcul du rappel (recall)
             recall = recall_score(y_true, predictions, average='weighted')
-            st.write(f"Rappel sur les prédictions : {recall:.3f}")
+            st.write(f"Rappel général : {recall:.3f}")
         else:
-            st.write("Les vraies valeurs ne sont pas disponibles dans le fichier. Impossible de calculer le rappel.")
+            st.write("Les vraies valeurs ne sont pas disponibles dans le fichier. Impossible de calculer la précision et le rappel.")
 
         return predictions  # Assurez-vous que cette ligne retourne bien les résultats attendus
     except Exception as e:
@@ -143,3 +151,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
