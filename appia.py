@@ -88,7 +88,6 @@ def process_file(file, model):
         if missing_columns:
             st.warning(f"Le fichier manque les colonnes suivantes : {', '.join(missing_columns)}")
             # Option pour remplir ou supprimer les colonnes manquantes
-            # Par exemple, on peut ajouter des valeurs par défaut (par exemple, 0) pour les colonnes manquantes
             for col in missing_columns:
                 data[col] = 0  # Vous pouvez ajuster cette valeur par défaut si nécessaire
 
@@ -110,10 +109,10 @@ def process_file(file, model):
         else:
             st.write("Les vraies valeurs ne sont pas disponibles dans le fichier. Impossible de calculer le rappel.")
 
-        return predictions
+        return predictions  # Assurez-vous que cette ligne retourne bien les résultats attendus
     except Exception as e:
         st.error(f"Erreur lors du traitement du fichier : {str(e)}")
-        return None
+        return None  # Retourner None en cas d'erreur, ce qui permettra d'afficher l'erreur dans la UI
 
 # Interface utilisateur Streamlit
 def main():
@@ -134,8 +133,10 @@ def main():
         result = process_file(uploaded_file, model)
 
         # Affichage du résultat de l'analyse
-        if result:
+        if result is not None:  # Modifié pour vérifier si 'result' est None
             st.success("Analyse terminée.")
+        else:
+            st.error("Une erreur est survenue pendant le traitement du fichier.")
 
         # Après l'analyse, permettre un nouveau téléchargement de fichier
         st.write("Vous pouvez télécharger un autre fichier si vous le souhaitez.")
