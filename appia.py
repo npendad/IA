@@ -8,8 +8,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, recall_score
 
-# Affichage du titre principal en haut de la page
-st.set_page_config(page_title="🛡️ Détecteur de Malwares", layout="centered")
+# Configuration de la page
+st.set_page_config(page_title="🛡️ Détecteur de Malwares", layout="wide")
 st.title("🛡️ Détecteur de Malwares")
 st.write("Analysez vos fichiers exécutables (.exe, .dll, .sys) pour détecter les menaces potentielles.")
 
@@ -115,10 +115,24 @@ def predict_malware(file):
     except Exception as e:
         return f"Erreur lors de l'analyse : {str(e)}"
 
-# Téléchargement de fichier
-uploaded_file = st.file_uploader("Téléchargez un fichier exécutable à analyser", type=["exe", "dll", "sys"])
+# Mise en page avec deux colonnes
+col1, col2 = st.columns([2, 1])  # Colonne gauche : 2 parts, Colonne droite : 1 part
 
+with col1:
+    st.subheader("📊 Résultats et Analyse")
+    st.write("Les résultats de l'analyse seront affichés ici après le téléversement du fichier.")
+
+with col2:
+    st.subheader("📂 Téléversez votre fichier")
+    uploaded_file = st.file_uploader(
+        "Téléchargez un fichier exécutable à analyser",
+        type=["exe", "dll", "sys"],
+        help="Drag and drop file here. Limit: 200MB."
+    )
+
+# Analyse du fichier
 if uploaded_file is not None:
-    st.info("⏳ Analyse en cours...")
-    result = predict_malware(uploaded_file)
-    st.success(result)
+    with col1:
+        st.info("⏳ Analyse en cours...")
+        result = predict_malware(uploaded_file)
+        st.success(result)
