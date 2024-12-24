@@ -2,22 +2,24 @@ import os
 import joblib
 import pandas as pd
 import streamlit as st
+import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, recall_score
+from sklearn.metrics import accuracy_score, recall_score, confusion_matrix, classification_report
 
 # Constantes
 MODEL_PATH = 'random_forest_model.pkl'
 FEATURES_LIST = [
     'AddressOfEntryPoint', 'MajorLinkerVersion', 'MajorImageVersion', 
-    'MajorOperatingSystemVersion', 'DllCharacteristics', 'SizeOfStackReserve', 'NumberOfSections', 'ResourceSize'
+    'MajorOperatingSystemVersion', 'DllCharacteristics', 'SizeOfStackReserve', 'NumberOfSections'
 ]
 
 # Fonction pour entraîner et sauvegarder le modèle
 def train_and_save_model():
     """Entraîner et sauvegarder un modèle RandomForestClassifier."""
-    st.write("Entraînement du modèle, cela peut prendre un moment...")
-    
+    st.info("Entraînement du modèle, veuillez patienter...")
+
     # Chargement des données
     data = pd.read_csv("DatasetmalwareExtrait.csv")
     X = data.drop(['legitimate'], axis=1)
@@ -36,45 +38,34 @@ def train_and_save_model():
     accuracy = accuracy_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred, average='weighted')
 
-    # Affichage des résultats
-    st.write(f"Précision du modèle : {accuracy:.3f}")
-    st.write(f"Rappel du modèle : {recall:.3f}")
-
     # Sauvegarde du modèle
     joblib.dump(model, MODEL_PATH)
-    st.write(f"Modèle sauvegardé sous : {MODEL_PATH}")
-    
+
+    # Affichage des métriques
+    st.success(f"Précision du modèle : {accuracy:.3f}")
+    st.success(f"Rappel du modèle : {recall:.3f}")
+
+    # Graphique de matrice de confusion
+    st.subheader("Matrice de confusion")
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.xlabel("Prédictions")
+    plt.ylabel("Vérités terrain")
+    st.pyplot(plt)
+
     return model, accuracy, recall
 
 # Fonction pour charger ou entraîner le modèle
 def load_or_train_model():
     """Charger le modèle si existant, sinon entraîner et sauvegarder."""
     if os.path.exists(MODEL_PATH):
-        st.write("Chargement du modèle existant...")
+        st.success("Modèle existant trouvé, chargement en cours...")
         model = joblib.load(MODEL_PATH)
-
-        # Charger les données pour recalculer la précision et le rappel
-        data = pd.read_csv("DatasetmalwareExtrait.csv")
-        X = data.drop(['legitimate'], axis=1)
-        y = data['legitimate']
-        
-        # Prédiction pour évaluer le modèle
-        y_pred = model.predict(X)
-        accuracy = accuracy_score(y, y_pred)
-        recall = recall_score(y, y_pred, average='weighted')
-
-        # Affichage des résultats
-        st.write(f"Précision du modèle : {accuracy:.3f}")
-        st.write(f"Rappel du modèle : {recall:.3f}")
-        st.write(f"Modèle chargé depuis : {MODEL_PATH}")
-        
-        return model, accuracy, recall
+        return model, None, None
     else:
         return train_and_save_model()
 
-from sklearn.metrics import accuracy_score, recall_score
-
-# Fonction pour traiter un fichier CSV ou Excel et calculer les prédictions
+# Fonction pour traiter un fichier CSV ou Excel
 def process_file(file, model):
     """Traiter un fichier .csv ou .xlsx et effectuer l'analyse."""
     try:
@@ -84,48 +75,42 @@ def process_file(file, model):
         elif file.name.endswith('.xlsx'):
             data = pd.read_excel(file)
 
-        # Vérifier si toutes les caractéristiques nécessaires sont présentes
-        missing_columns = [col for col in FEATURES_LIST if col not in data.columns]
-        
-        if missing_columns:
-            st.warning(f"Le fichier manque les colonnes suivantes : {', '.join(missing_columns)}")
-            # Option pour remplir ou supprimer les colonnes manquantes
-            for col in missing_columns:
-                data[col] = 0  # Vous pouvez ajuster cette valeur par défaut si nécessaire
+        st.success(f"Fichier {file.name} chargé avec succès !")
+        st.write("**Aperçu des données :**")
+        st.dataframe(data.head())
 
-        # Assurez-vous que les colonnes du fichier correspondent aux caractéristiques du modèle
-        data = data[FEATURES_LIST]  # Sélectionner uniquement les colonnes nécessaires
+        # Vérifier si toutes les colonnes nécessaires sont présentes
+        missing_features = [col for col in FEATURES_LIST if col not in data.columns]
+        if missing_features:
+            st.error(f"Colonnes manquantes : {missing_features}")
+            return None
 
-        # Faire la prédiction sur les données du fichier
-        predictions = model.predict(data)
+        # Prédictions sur les données
+        predictions = model.predict(data[FEATURES_LIST])
+        data['Prediction'] = predictions
 
-        # Afficher les prédictions
-        st.write("Prédictions du modèle :")
-        st.write(predictions)
+        st.write("**Résultats des prédictions :**")
+        st.dataframe(data[['Prediction']].value_counts().reset_index(name='Counts'))
 
-        # Calculez la précision et le rappel pour les prédictions
-        if 'legitimate' in data.columns:
-            y_true = data['legitimate']  # Valeurs réelles (labels)
-            
-            # Calcul de la précision générale (accuracy)
-            accuracy = accuracy_score(y_true, predictions)
-            st.write(f"Précision générale : {accuracy:.3f}")
+        # Graphique des résultats de prédictions
+        st.subheader("Distribution des Prédictions")
+        plt.figure(figsize=(6, 4))
+        sns.countplot(data['Prediction'], palette="Set2")
+        plt.title("Distribution des prédictions (Malware vs Légitime)")
+        plt.xlabel("Classe prédite")
+        plt.ylabel("Nombre de cas")
+        st.pyplot(plt)
 
-            # Calcul du rappel (recall)
-            recall = recall_score(y_true, predictions, average='weighted')
-            st.write(f"Rappel général : {recall:.3f}")
-        else:
-            st.write("Les vraies valeurs ne sont pas disponibles dans le fichier. Impossible de calculer la précision et le rappel.")
+        return data
 
-        return predictions  # Assurez-vous que cette ligne retourne bien les résultats attendus
     except Exception as e:
         st.error(f"Erreur lors du traitement du fichier : {str(e)}")
-        return None  # Retourner None en cas d'erreur, ce qui permettra d'afficher l'erreur dans la UI
+        return None
 
 # Interface utilisateur Streamlit
 def main():
     st.sidebar.header("🛡️ Détecteur de Malwares")
-    st.sidebar.write("Téléchargez un fichier CSV ou Excel pour déterminer les informations pertinentes ou prédire un résultat.")
+    st.sidebar.write("Téléchargez un fichier CSV ou Excel pour analyser les données ou effectuer des prédictions.")
 
     # Charger ou entraîner le modèle
     model, accuracy, recall = load_or_train_model()
@@ -135,19 +120,14 @@ def main():
 
     if uploaded_file is not None:
         # Affichage de l'état d'analyse
-        st.write("Analyse en cours...")
+        st.info("Analyse en cours...")
 
         # Effectuer l'analyse du fichier téléchargé
-        result = process_file(uploaded_file, model)
-
-        # Affichage du résultat de l'analyse
-        if result is not None:  # Modifié pour vérifier si 'result' est None
-            st.success("Analyse terminée.")
-        else:
-            st.error("Une erreur est survenue pendant le traitement du fichier.")
+        processed_data = process_file(uploaded_file, model)
 
         # Après l'analyse, permettre un nouveau téléchargement de fichier
-        st.write("Vous pouvez télécharger un autre fichier si vous le souhaitez.")
+        if processed_data is not None:
+            st.success("Analyse terminée avec succès !")
 
 if __name__ == "__main__":
     main()
