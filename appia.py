@@ -1,134 +1,126 @@
 import os
 import joblib
+import pefile
+import numpy as np
 import pandas as pd
 import streamlit as st
-import seaborn as sns
+import hashlib
+import traceback
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, recall_score, confusion_matrix, classification_report
+from sklearn.metrics import accuracy_score, recall_score
 
-# Constantes
+# Chemin vers le modèle sauvegardé
 MODEL_PATH = 'random_forest_model.pkl'
-FEATURES_LIST = [
-    'AddressOfEntryPoint', 'MajorLinkerVersion', 'MajorImageVersion', 
-    'MajorOperatingSystemVersion', 'DllCharacteristics', 'SizeOfStackReserve', 'NumberOfSections'
-]
 
 # Fonction pour entraîner et sauvegarder le modèle
 def train_and_save_model():
-    """Entraîner et sauvegarder un modèle RandomForestClassifier."""
-    st.info("Entraînement du modèle, veuillez patienter...")
-
-    # Chargement des données
+    st.info("Aucun modèle trouvé. Entraînement du modèle en cours...")
     data = pd.read_csv("DatasetmalwareExtrait.csv")
     X = data.drop(['legitimate'], axis=1)
     y = data['legitimate']
-
-    # Entraînement du modèle
+    
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
     model = RandomForestClassifier(
-        n_estimators=196, random_state=42, criterion="gini", max_depth=25, 
-        min_samples_split=4, min_samples_leaf=1
+        n_estimators=196, random_state=42, criterion="gini",
+        max_depth=25, min_samples_split=4, min_samples_leaf=1
     )
     model.fit(X_train, y_train)
-
-    # Évaluation du modèle
+    
     y_pred = model.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred, average='weighted')
-
-    # Sauvegarde du modèle
+    
+    st.success(f"Modèle entraîné avec succès. Précision : {accuracy:.3f}, Rappel : {recall:.3f}")
     joblib.dump(model, MODEL_PATH)
+    st.info(f"Modèle sauvegardé sous : {MODEL_PATH}")
+    return model
 
-    # Affichage des métriques
-    st.success(f"Précision du modèle : {accuracy:.3f}")
-    st.success(f"Rappel du modèle : {recall:.3f}")
+# Chargement ou entraînement du modèle
+if os.path.exists(MODEL_PATH):
+    st.info("Chargement du modèle existant...")
+    model = joblib.load(MODEL_PATH)
+else:
+    model = train_and_save_model()
 
-    # Graphique de matrice de confusion
-    st.subheader("Matrice de confusion")
-    cm = confusion_matrix(y_test, y_pred)
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-    plt.xlabel("Prédictions")
-    plt.ylabel("Vérités terrain")
-    st.pyplot(plt)
+# Fonction pour calculer le hash d'un fichier
+def calculate_file_hash(file_path):
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
 
-    return model, accuracy, recall
-
-# Fonction pour charger ou entraîner le modèle
-def load_or_train_model():
-    """Charger le modèle si existant, sinon entraîner et sauvegarder."""
-    if os.path.exists(MODEL_PATH):
-        st.success("Modèle existant trouvé, chargement en cours...")
-        model = joblib.load(MODEL_PATH)
-        return model, None, None
-    else:
-        return train_and_save_model()
-
-# Fonction pour traiter un fichier CSV ou Excel
-def process_file(file, model):
-    """Traiter un fichier .csv ou .xlsx et effectuer l'analyse."""
+# Fonction pour extraire les attributs PE
+def extract_pe_attributes(file_path):
     try:
-        # Lire le fichier en tant que dataframe pandas
-        if file.name.endswith('.csv'):
-            data = pd.read_csv(file)
-        elif file.name.endswith('.xlsx'):
-            data = pd.read_excel(file)
-
-        st.success(f"Fichier {file.name} chargé avec succès !")
-        st.write("**Aperçu des données :**")
-        st.dataframe(data.head())
-
-        # Vérifier si toutes les colonnes nécessaires sont présentes
-        missing_features = [col for col in FEATURES_LIST if col not in data.columns]
-        if missing_features:
-            st.error(f"Colonnes manquantes : {missing_features}")
-            return None
-
-        # Prédictions sur les données
-        predictions = model.predict(data[FEATURES_LIST])
-        data['Prediction'] = predictions
-
-        st.write("**Résultats des prédictions :**")
-        st.dataframe(data[['Prediction']].value_counts().reset_index(name='Counts'))
-
-        # Graphique des résultats de prédictions
-        st.subheader("Distribution des Prédictions")
-        plt.figure(figsize=(6, 4))
-        sns.countplot(data['Prediction'], palette="Set2")
-        plt.title("Distribution des prédictions (Malware vs Légitime)")
-        plt.xlabel("Classe prédite")
-        plt.ylabel("Nombre de cas")
-        st.pyplot(plt)
-
-        return data
-
+        pe = pefile.PE(file_path)
+        attributes = {
+            'AddressOfEntryPoint': pe.OPTIONAL_HEADER.AddressOfEntryPoint,
+            'MajorLinkerVersion': pe.OPTIONAL_HEADER.MajorLinkerVersion,
+            'MajorImageVersion': pe.OPTIONAL_HEADER.MajorImageVersion,
+            'MajorOperatingSystemVersion': pe.OPTIONAL_HEADER.MajorOperatingSystemVersion,
+            'DllCharacteristics': pe.OPTIONAL_HEADER.DllCharacteristics,
+            'SizeOfStackReserve': pe.OPTIONAL_HEADER.SizeOfStackReserve,
+            'NumberOfSections': pe.FILE_HEADER.NumberOfSections,
+            'ResourceSize': pe.OPTIONAL_HEADER.DATA_DIRECTORY[2].Size
+        }
+        return attributes
     except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier : {str(e)}")
-        return None
+        st.error(f"Erreur de traitement du fichier : {str(e)}")
+        return {"Erreur": str(e)}
+
+# Fonction de prédiction
+def predict_malware(file):
+    if model is None:
+        return "Erreur : Modèle non chargé"
+
+    try:
+        temp_file = f"temp_{file.name}"
+        with open(temp_file, "wb") as f:
+            f.write(file.read())
+
+        attributes = extract_pe_attributes(temp_file)
+        if "Erreur" in attributes:
+            return attributes["Erreur"]
+
+        df = pd.DataFrame([attributes])
+        prediction = model.predict(df)
+        proba = model.predict_proba(df)[0]
+
+        os.remove(temp_file)
+        return prediction[0], proba
+    except Exception as e:
+        return f"Erreur d'analyse : {str(e)}"
 
 # Interface utilisateur Streamlit
-def main():
-    st.sidebar.header("🛡️ Détecteur de Malwares")
-    st.sidebar.write("Téléchargez un fichier CSV ou Excel pour analyser les données ou effectuer des prédictions.")
+st.title("🛡️ Détecteur de Malwares")
+st.write("Téléchargez un fichier exécutable pour analyser s'il est légitime ou un malware.")
 
-    # Charger ou entraîner le modèle
-    model, accuracy, recall = load_or_train_model()
+uploaded_file = st.file_uploader("Télécharger un fichier exécutable (.exe, .dll, .sys)", type=["exe", "dll", "sys"])
 
-    # Téléchargement de fichier CSV ou Excel
-    uploaded_file = st.file_uploader("Téléchargez un fichier CSV ou Excel", type=["csv", "xlsx"])
+if uploaded_file is not None:
+    st.info("Analyse en cours...")
+    result = predict_malware(uploaded_file)
 
-    if uploaded_file is not None:
-        # Affichage de l'état d'analyse
-        st.info("Analyse en cours...")
-
-        # Effectuer l'analyse du fichier téléchargé
-        processed_data = process_file(uploaded_file, model)
-
-        # Après l'analyse, permettre un nouveau téléchargement de fichier
-        if processed_data is not None:
-            st.success("Analyse terminée avec succès !")
-
-if __name__ == "__main__":
-    main()
-
+    if isinstance(result, tuple):
+        prediction, proba = result
+        col1, col2 = st.columns(2)
+        
+        if prediction == 1:
+            col1.error(f"🚨 **MALWARE détecté !**")
+            col2.metric("Probabilité de Malware", f"{proba[1] * 100:.2f}%")
+        else:
+            col1.success(f"✅ **Fichier légitime !**")
+            col2.metric("Probabilité de légitimité", f"{proba[0] * 100:.2f}%")
+        
+        # Affichage graphique des probabilités
+        labels = ['Légitime', 'Malware']
+        plt.figure(figsize=(4, 4))
+        plt.bar(labels, proba, color=['green', 'red'])
+        plt.title("Probabilités de classification")
+        plt.ylabel("Probabilité")
+        st.pyplot(plt)
+    else:
+        st.error(result)
