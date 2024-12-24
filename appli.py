@@ -19,7 +19,8 @@ MODEL_PATH = 'random_forest_model.pkl'
 # Fonction pour entraîner et sauvegarder le modèle
 def train_and_save_model():
     """Entraîner et sauvegarder le modèle."""
-    st.info("⏳ Entraînement du modèle en cours...")
+    training_message = st.empty()  # Conteneur temporaire pour le message d'entraînement
+    training_message.info("⏳ Entraînement du modèle en cours...")
     
     # Chargement des données
     data = pd.read_csv("DatasetmalwareExtrait.csv")
@@ -38,6 +39,9 @@ def train_and_save_model():
     y_pred = model.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred, average='weighted')
+
+    # Suppression du message temporaire
+    training_message.empty()
 
     st.success(f"Modèle entraîné avec succès. Précision : {accuracy:.3f}, Rappel : {recall:.3f}")
     
