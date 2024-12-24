@@ -5,3 +5,4 @@ pefile
 pandas
 numpy
 setuptools
+seaborn
