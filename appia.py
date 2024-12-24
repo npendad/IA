@@ -19,7 +19,8 @@ MODEL_PATH = 'random_forest_model.pkl'
 # Fonction pour entraîner et sauvegarder le modèle
 def train_and_save_model():
     """Entraîner et sauvegarder le modèle."""
-    st.info("⏳ Entraînement du modèle en cours...")
+    training_message = st.empty()  # Conteneur temporaire pour le message d'entraînement
+    training_message.info("⏳ Entraînement du modèle en cours...")
     
     # Chargement des données
     data = pd.read_csv("DatasetmalwareExtrait.csv")
@@ -39,6 +40,9 @@ def train_and_save_model():
     accuracy = accuracy_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred, average='weighted')
 
+    # Suppression du message temporaire
+    training_message.empty()
+
     st.success(f"Modèle entraîné avec succès. Précision : {accuracy:.3f}, Rappel : {recall:.3f}")
     
     # Sauvegarde du modèle
@@ -47,8 +51,10 @@ def train_and_save_model():
 
 # Chargement ou entraînement du modèle
 if os.path.exists(MODEL_PATH):
-    st.info("🔄 Chargement du modèle existant...")
+    model_message = st.empty()
+    model_message.info("🔄 Chargement du modèle existant...")
     model = joblib.load(MODEL_PATH)
+    model_message.empty()  # Supprime le message après le chargement
 else:
     model = train_and_save_model()
 
@@ -133,6 +139,8 @@ with col2:
 # Analyse du fichier
 if uploaded_file is not None:
     with col1:
-        st.info("⏳ Analyse en cours...")
+        analysis_message = st.empty()  # Message temporaire d'analyse
+        analysis_message.info("⏳ Analyse en cours...")
         result = predict_malware(uploaded_file)
+        analysis_message.empty()  # Supprime le message d'analyse après l'exécution
         st.success(result)
