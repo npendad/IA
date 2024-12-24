@@ -8,6 +8,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, recall_score
 
+# Affichage du titre principal en haut de la page
+st.set_page_config(page_title="🛡️ Détecteur de Malwares", layout="centered")
+st.title("🛡️ Détecteur de Malwares")
+st.write("Analysez vos fichiers exécutables (.exe, .dll, .sys) pour détecter les menaces potentielles.")
+
 # Chemin vers le modèle sauvegardé
 MODEL_PATH = 'random_forest_model.pkl'
 
@@ -109,10 +114,6 @@ def predict_malware(file):
         return result
     except Exception as e:
         return f"Erreur lors de l'analyse : {str(e)}"
-
-# Interface Streamlit
-st.title("🛡️ Détecteur de Malwares")
-st.write("Analysez vos fichiers exécutables (.exe, .dll, .sys) pour détecter les menaces potentielles.")
 
 # Téléchargement de fichier
 uploaded_file = st.file_uploader("Téléchargez un fichier exécutable à analyser", type=["exe", "dll", "sys"])
